@@ -25,8 +25,6 @@
 
 ![生成语音页](docs/screenshots/generate.png)
 
-![音色库](docs/screenshots/voices.png)
-
 ![设置](docs/screenshots/settings.png)
 
 ---
