@@ -1,0 +1,11 @@
+# Keep Windows launchers CRLF; Git on Linux/macOS may otherwise check them out as LF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Normal text files.
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf

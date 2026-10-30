@@ -1,0 +1,5 @@
+# Gptsovit Auto 的运行依赖；GPT-SoVITS 自带的 runtime 通常已经包含它们。
+# The workspace only needs these two libraries; the GPT-SoVITS runtime already
+# bundles compatible versions.
+PyYAML>=6.0
+requests>=2.28

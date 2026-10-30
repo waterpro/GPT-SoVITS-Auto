@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local configuration (machine-specific paths and voice names)
+config/settings.yaml
+config/tts_infer.local.yaml
+config/backups/
+voices/voices.yaml
+voices/backups/
+
+# Runtime data
+state/
+logs/
+cache/
+tmp/
+*.part
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
