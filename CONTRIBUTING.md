@@ -34,6 +34,12 @@ Thanks for improving Gptsovit Auto.
 - For UI changes, run `ui_main.py`/`run_ui.bat` and exercise preview, start/stop,
   and one voice add/remove; keep Tkinter work on the main thread and long work in
   the worker thread.
+- For drag-and-drop changes, test with an actual `.md` file on Windows (or send a
+  synthetic `WM_DROPFILES`); for random takes, check the `↳` rows and the
+  `_随机NN` filenames without relying on the project manifest.
+- Do not add copyrighted character names, model download links, reference audio,
+  or model files to the repository. Use A/B/C/D placeholders and tell users to
+  download/configure their own models.
 
 ## Pull requests
 

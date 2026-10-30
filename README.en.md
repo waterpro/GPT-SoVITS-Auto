@@ -78,12 +78,20 @@ run.bat init --install "%GPT_SOVITS_HOME%"
 Double-click `run_ui.bat`. It looks for `pythonw.exe` in the same order as
 `run.bat`, then opens a four-tab window:
 
-- **Generate**: choose a document, preview every line, start/stop generation,
-  open the output folder.
+- **Generate**: choose or drag in a `.md`/`.txt` document, preview every line,
+  start/stop generation, and open the output folder.
+- **Random takes**: select one preview row, choose 1–9 takes, and generate the
+  same line repeatedly with different random seeds. The extra rows are inserted
+  directly below the original and marked `↳`; files get `_随机01`, `_随机02`…
+  suffixes next to the normal output.
 - **Voices**: view configured voices, add from a preset, add manually, remove.
 - **Settings**: install root, output root, extra model roots; saves with a
   backup and reloads the environment.
 - **Help**: short beginner instructions.
+
+Drag-and-drop uses the native Windows `WM_DROPFILES` message (no TkDND
+dependency). If the window cannot register it, the **Browse…** button still
+works.
 
 The UI uses `pythonw.exe`, so there is no console. If the window does not
 appear, check `logs\ui-crash.log` or run `run.bat --version` in a terminal.
@@ -163,6 +171,14 @@ IDs come from `[0001]`, then timecodes (`[04:25]` -> `0425`), then a
 zero-padded line index. Existing files are never overwritten unless they are
 owned by the current project manifest; resume is on by default.
 
+### Script format for agents
+
+[`SKILL.md`](SKILL.md) is a self-contained, agent-readable specification for
+this dialogue format. Point another agent at that file when you want it to
+write or convert a script; it covers speaker patterns, IDs/timecodes,
+frontmatter, comments, Markdown cleanup, and conversion examples using A/B/C/D
+placeholders only.
+
 ## Read-only Guarantee
 
 - API config is `config\tts_infer.local.yaml`, never the install config.
@@ -205,8 +221,9 @@ and troubleshooting notes.
 
 ## Tests
 
-The workspace has 40 unit tests covering parsing, naming, settings, voice
-discovery/editing, server-config generation, and WAV validation:
+The workspace has 45 unit tests covering parsing, naming, settings, voice
+discovery/editing, server-config generation, WAV validation, random-take file
+naming, `SKILL.md`, and the generic example:
 
 ```bat
 "%GPT_SOVITS_HOME%\runtime\python.exe" -B -m unittest discover -s tests -v
@@ -215,8 +232,9 @@ discovery/editing, server-config generation, and WAV validation:
 `voices scan --json` is intended for scripting and prints only JSON.
 
 The UI was smoke-tested end-to-end: preview, generation of the four-line
-example, resume skip, preset/manual add/remove, settings reload, and
-`run_ui.bat` launching `pythonw.exe`.
+example, resume skip, preset/manual add/remove, settings reload, drag-and-drop
+of a `.md` file into the window, two random takes of one line (rows and
+`_随机NN` files), and `run_ui.bat` launching `pythonw.exe`.
 
 ## License
 

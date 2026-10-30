@@ -22,7 +22,15 @@ from .bootstrap import WORKSPACE_ROOT, ensure_initial_files, update_settings_fil
 from .client import TTSClient
 from .log import get_log_path, setup_logger
 from .naming import sanitize_project
-from .runner import Plan, RunOptions, RunnerError, build_plan, run
+from .runner import (
+    Plan,
+    PlannedJob,
+    RunOptions,
+    RunnerError,
+    build_plan,
+    generate_random_takes,
+    run,
+)
 from .server import gpu_free_mb
 from .settings import Settings, load_settings
 from .ui_theme import (
@@ -77,6 +85,7 @@ class GenerateTab(ttk.Frame):
         self.plan: Optional[Plan] = None
         self._plan_key: Optional[tuple] = None
         self._row_numbers: Dict[int, int] = {}
+        self._take_rows: List[str] = []
         self._build()
 
     def _build(self) -> None:
@@ -88,7 +97,7 @@ class GenerateTab(ttk.Frame):
         source.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 8))
         source.columnconfigure(1, weight=1)
 
-        head = section_header(source, "1. 选择台本文档", "支持 .md / .txt；一行一句台词。")
+        head = section_header(source, "1. 选择台本文档", "支持 .md / .txt；一行一句台词，可直接把文件拖入窗口。")
         head.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 8))
 
         ttk.Label(source, text="文档", style="Card.TLabel").grid(row=1, column=0, sticky="w", pady=4)
@@ -164,6 +173,27 @@ class GenerateTab(ttk.Frame):
             font=(FONT, 9),
         ).pack(side="left", padx=(14, 0))
 
+        random_box = tk.Frame(options, bg=CARD)
+        random_box.pack(side="left", padx=(22, 0))
+        ttk.Label(random_box, text="随机多录", style="Card.TLabel").pack(side="left")
+        self.takes_var = tk.StringVar(value="3")
+        ttk.Spinbox(
+            random_box,
+            from_=1,
+            to=9,
+            width=3,
+            textvariable=self.takes_var,
+            justify="center",
+        ).pack(side="left", padx=(6, 4))
+        ttk.Label(random_box, text="条", style="CardHint.TLabel").pack(side="left")
+        self.random_btn = ttk.Button(
+            random_box,
+            text="生成多条",
+            style="Small.TButton",
+            command=self.random_takes,
+        )
+        self.random_btn.pack(side="left", padx=(6, 0))
+
         main_buttons = tk.Frame(actions, bg=CARD)
         main_buttons.grid(row=0, column=1, sticky="e")
         self.stop_btn = ttk.Button(main_buttons, text="停止", style="Danger.TButton", command=self.stop)
@@ -236,6 +266,7 @@ class GenerateTab(ttk.Frame):
         self.tree.tag_configure("run", foreground="#2563eb")
         self.tree.tag_configure("done", foreground=SUCCESS)
         self.tree.tag_configure("error", foreground=DANGER)
+        self.tree.tag_configure("take", background="#f1f5f9")
 
         log_card = make_card(self, padding=10)
         log_card.grid(row=3, column=0, sticky="nsew", padx=4, pady=(0, 4))
@@ -282,8 +313,10 @@ class GenerateTab(ttk.Frame):
             if not self.out_var.get().strip():
                 self.out_var.set(str(settings.output_root))
             self.start_btn.configure(state="normal")
+            self.random_btn.configure(state="normal")
         else:
             self.start_btn.configure(state="disabled")
+            self.random_btn.configure(state="disabled")
         self.stop_btn.configure(state="disabled")
 
     # ------------------------------------------------------------------ 文档
@@ -296,6 +329,11 @@ class GenerateTab(ttk.Frame):
         if path:
             self.doc_var.set(path)
             self.preview()
+
+    def set_document(self, path: Path) -> None:
+        self.doc_var.set(str(path))
+        self.preview()
+        self.app.set_status("已加载文档：%s" % path)
 
     def load_example(self) -> None:
         path = WORKSPACE_ROOT / "examples" / "example.md"
@@ -444,6 +482,133 @@ class GenerateTab(ttk.Frame):
         if status in ("生成中", "已完成", "失败"):
             self.tree.see(iid)
 
+    # ------------------------------------------------------------------ 随机多录
+    def _clear_take_rows(self) -> None:
+        for iid in self._take_rows:
+            if self.tree.exists(iid):
+                self.tree.delete(iid)
+        self._take_rows = []
+
+    def _selected_plan_job(self) -> Optional[PlannedJob]:
+        if self.plan is None:
+            return None
+        selection = self.tree.selection()
+        if not selection:
+            return None
+        iid = str(selection[0])
+        if iid.startswith("take:"):
+            parts = iid.split(":")
+            if len(parts) < 3:
+                return None
+            iid = parts[1]
+        try:
+            index = int(iid)
+        except ValueError:
+            return None
+        for item in self.plan.jobs:
+            if item.job.index == index:
+                return item
+        return None
+
+    def random_takes(self) -> None:
+        if self.app.worker is not None and self.app.worker.is_alive():
+            return
+        if self.settings is None or self.registry is None or self.plan is None:
+            if not self.preview():
+                return
+        item = self._selected_plan_job()
+        if item is None:
+            messagebox.showwarning(
+                "先选一句",
+                "请在上面的预览表里点选一句台词，再点“生成多条”。",
+                parent=self,
+            )
+            return
+        try:
+            count = int(self.takes_var.get())
+        except ValueError:
+            count = 0
+        if count < 1 or count > 9:
+            messagebox.showwarning("条数不对", "随机多录条数请填 1 到 9。", parent=self)
+            return
+        self.app.start_random_takes(item, count)
+
+    def on_takes_started(self, item: PlannedJob, count: int) -> None:
+        self._clear_take_rows()
+        self.start_btn.configure(state="disabled")
+        self.random_btn.configure(state="disabled")
+        self.stop_btn.configure(state="normal")
+        self.progress.configure(maximum=max(1, count), value=0)
+        self.count_var.set("随机多录：准备中…")
+        index = item.job.index
+        try:
+            position = list(self.tree.get_children()).index(str(index)) + 1
+        except ValueError:
+            position = len(self.tree.get_children())
+        text = item.job.text
+        if len(text) > 46:
+            text = text[:43] + "..."
+        for number in range(1, count + 1):
+            iid = "take:%d:%d" % (index, number)
+            self.tree.insert(
+                "",
+                position + number - 1,
+                iid=iid,
+                values=(
+                    "↳%d" % number,
+                    item.job.line_no,
+                    item.job.id,
+                    item.job.speaker,
+                    item.voice.key,
+                    text,
+                    "排队",
+                    "",
+                ),
+                tags=("take",),
+            )
+            self._take_rows.append(iid)
+
+    def _set_take_row(self, event: Dict[str, Any], status: str, tag: str = "") -> None:
+        iid = "take:%d:%d" % (int(event.get("index", 0)), int(event.get("batch", 0)))
+        if not self.tree.exists(iid):
+            return
+        values = list(self.tree.item(iid, "values"))
+        if len(values) >= 7:
+            values[6] = status
+        output = str(event.get("output") or "")
+        if output and len(values) >= 8:
+            values[7] = short_path(Path(output), self.settings, limit=52) if self.settings else output
+        self.tree.item(iid, values=values, tags=(tag,) if tag else ("take",))
+        self.tree.see(iid)
+
+    def on_take_start(self, event: Dict[str, Any]) -> None:
+        self._set_take_row(event, "生成中", "run")
+
+    def on_take_done(self, event: Dict[str, Any]) -> None:
+        duration = float(event.get("duration", 0.0) or 0.0)
+        self._set_take_row(event, "完成 %.2fs" % duration, "done")
+
+    def on_take_error(self, event: Dict[str, Any]) -> None:
+        self._set_take_row(event, "失败", "error")
+
+    def on_takes_finished(self, event: Dict[str, Any]) -> None:
+        self.start_btn.configure(state="normal")
+        self.random_btn.configure(state="normal")
+        self.stop_btn.configure(state="disabled")
+        done = int(event.get("done", 0))
+        failed = int(event.get("failed", 0))
+        count = int(event.get("count", done + failed))
+        self.progress.configure(maximum=max(1, count), value=done + failed)
+        self.count_var.set("随机多录完成 %d / 失败 %d" % (done, failed))
+        self.app.set_status("随机多录结束：成功 %d，失败 %d。" % (done, failed))
+
+    def on_takes_cancelled(self, event: Dict[str, Any]) -> None:
+        self.start_btn.configure(state="normal")
+        self.random_btn.configure(state="normal")
+        self.stop_btn.configure(state="disabled")
+        self.count_var.set("随机多录已停止")
+        self.app.set_status("随机多录已停止。")
+
     # ------------------------------------------------------------------ 生成
     def _run_options(self, dry_run: bool = False) -> RunOptions:
         return RunOptions(
@@ -495,7 +660,9 @@ class GenerateTab(ttk.Frame):
 
     # ------------------------------------------------------------------ 进度
     def on_started(self, log_path: Optional[str]) -> None:
+        self._clear_take_rows()
         self.start_btn.configure(state="disabled")
+        self.random_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.progress.configure(value=0)
         self.count_var.set("启动服务中…")
@@ -511,6 +678,7 @@ class GenerateTab(ttk.Frame):
 
     def on_finished(self, info: Dict[str, Any]) -> None:
         self.start_btn.configure(state="normal")
+        self.random_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
         total = int(info.get("done", 0)) + int(info.get("failed", 0)) + int(info.get("skipped", 0)) + int(
             info.get("not_run", 0)
@@ -524,6 +692,7 @@ class GenerateTab(ttk.Frame):
 
     def on_cancelled(self, info: Dict[str, Any]) -> None:
         self.start_btn.configure(state="normal")
+        self.random_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
         self.count_var.set("已停止：完成 %s，失败 %s" % (info.get("done", 0), info.get("failed", 0)))
 
@@ -765,11 +934,15 @@ class HelpTab(ttk.Frame):
 3. 点“保存并重新检测”。检测通过后，顶部会显示绿色状态。
 
 二、生成语音
-1. 在“生成语音”页选择 .md 或 .txt 台本文档。点“载入示例”可以先试跑。
+1. 在“生成语音”页选择 .md 或 .txt 台本文档，或直接把文档拖进窗口。点“载入示例”可以先试跑。
 2. 程序会自动解析；也可以点“解析预览”。表格里能看到每一句的角色、音色和输出文件。
 3. 点“开始生成”。第一次会启动 API 并加载模型，需要等几十秒。
 4. 生成中可以点“停止”；当前这一句结束后会安全停下。
 5. 完成后点“打开输出目录”查看 wav。
+
+随机多录：在预览表里选中一句，把“随机多录”的条数设为 1–9，点“生成多条”。
+每次会用不同随机种子生成同一句，子行紧挨着原句并带 ↳ 标记；文件名为
+原名_随机01.wav、原名_随机02.wav……，不会影响正式生成的断点续跑。
 
 三、文档格式
 支持这些写法（角色名必须在“音色库”里）：
@@ -791,10 +964,15 @@ class HelpTab(ttk.Frame):
 - 手动添加：选 GPT/SoVITS 权重和一段参考音频，填写参考台词。
 参考台词必须和参考音频里真正说出的内容一致。添加后会自动备份 voices.yaml。
 
-五、注意
+五、让其他 agent 写脚本
+把工作区的 SKILL.md 给 agent 读；它是一份独立的台词格式规范，包含角色写法、
+编号、时间码、frontmatter、注释和转换示例。示例角色统一用 A/B/C/D。
+
+六、注意
 - GPT-SoVITS 安装目录是只读的，程序不会修改里面的文件。
 - 批量生成时显卡要同时容纳 WebUI 和 API；显存不足时先关闭 WebUI 的推理页。
-- 详细说明见工作区 README.md 和 README.en.md。
+- 拖入文件只接受 .md / .txt / .markdown；注册失败时仍可用“浏览…”。
+- 详细说明见工作区 README.md、README.en.md 和 SKILL.md。
 """
         text.insert("1.0", content)
         text.configure(state="disabled")
@@ -825,7 +1003,9 @@ class App(tk.Tk):
         self._closing = False
         self._close_pending = False
         self._close_ticks = 0
+        self._drop_targets: List[Any] = []
         self._build()
+        self._setup_file_drop()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(80, self._poll_queue)
         self.after(120, self.initialize_environment)
@@ -898,6 +1078,41 @@ class App(tk.Tk):
             font=(FONT, 8),
             anchor="e",
         ).grid(row=0, column=1, sticky="e")
+
+    def _setup_file_drop(self) -> None:
+        try:
+            from .ui_dnd import enable_file_drop
+
+            # DragAcceptFiles is registered on the top-level window.  The OS
+            # routes drops over child widgets (including the document Entry)
+            # to that window, so one target is enough and avoids subclassing
+            # the same HWND twice.
+            target = enable_file_drop(self, self._on_files_dropped)
+            self._drop_targets = [target] if target is not None else []
+        except Exception:  # noqa: BLE001
+            self._drop_targets = []
+
+    def _on_files_dropped(self, paths: List[Path]) -> None:
+        accepted = [
+            path
+            for path in paths
+            if path.suffix.lower() in (".md", ".txt", ".markdown")
+        ]
+        if not accepted:
+            self.set_status("只支持拖入 .md / .txt 台本文档。")
+            return
+        path = accepted[0]
+        self.notebook.select(self.generate_tab)
+        self.generate_tab.set_document(path)
+        self.set_status("已拖入文档：%s" % path)
+
+    def _disable_drop(self) -> None:
+        for target in self._drop_targets:
+            try:
+                target.disable()
+            except Exception:  # noqa: BLE001
+                pass
+        self._drop_targets = []
 
     # ------------------------------------------------------------------ 环境
     def initialize_environment(self) -> None:
@@ -1004,6 +1219,65 @@ class App(tk.Tk):
         )
         self.worker.start()
 
+    def start_random_takes(self, item: PlannedJob, count: int) -> None:
+        if self.settings is None or self.registry is None:
+            messagebox.showwarning("环境未就绪", "请先在“设置”页完成配置。", parent=self)
+            return
+        if self.worker is not None and self.worker.is_alive():
+            return
+        project = self.generate_tab.project_var.get().strip() or Path(
+            self.generate_tab.doc_var.get()
+        ).stem
+        try:
+            logger = setup_logger(self.settings, project, verbose=True)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("无法启动", "创建日志失败：\n%s" % exc, parent=self)
+            return
+        handler = _QueueHandler(self.events)
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
+        logger.addHandler(handler)
+        self._queue_handler = handler
+        self._finish_info = None
+        self.cancel_event = threading.Event()
+        self.generate_tab.on_takes_started(item, count)
+        self.generate_tab.append_log(
+            "随机多录：%s，共 %d 条" % (item.output.name, count)
+        )
+        self.set_status("正在启动随机多录……")
+        self.worker = threading.Thread(
+            target=self._run_takes_worker,
+            args=(self.settings, item, count, logger, self.cancel_event),
+            name="gptsovit-ui-takes",
+            daemon=True,
+        )
+        self.worker.start()
+
+    def _run_takes_worker(
+        self,
+        settings: Settings,
+        item: PlannedJob,
+        count: int,
+        logger: logging.Logger,
+        cancel: threading.Event,
+    ) -> None:
+        code = 3
+        try:
+            code = generate_random_takes(
+                settings,
+                item,
+                count,
+                logger,
+                progress=self.events.put,
+                cancel=cancel,
+            )
+        except Exception:  # noqa: BLE001
+            detail = traceback.format_exc()
+            logger.error("随机多录失败：\n%s", detail)
+            self.events.put({"type": "fatal", "message": detail})
+        finally:
+            self.events.put({"type": "worker_end", "code": code})
+
     def _run_worker(
         self,
         settings: Settings,
@@ -1091,6 +1365,36 @@ class App(tk.Tk):
         if kind == "skip":
             tab._set_row_status(event.get("index"), "已跳过")
             return
+        if kind == "take_start":
+            tab.on_take_start(event)
+            self.set_status(
+                "随机多录 %s/%s：%s"
+                % (event.get("batch", ""), event.get("count", ""), event.get("take", ""))
+            )
+            return
+        if kind == "take_done":
+            tab.on_take_done(event)
+            batch = int(event.get("batch", 0))
+            count = int(event.get("count", 0))
+            tab.progress.configure(value=batch)
+            tab.count_var.set("随机多录 %d / %d" % (batch, count))
+            return
+        if kind == "take_error":
+            tab.on_take_error(event)
+            tab.append_log("随机失败：%s" % event.get("message", ""))
+            return
+        if kind == "takes_finish":
+            tab.on_takes_finished(event)
+            tab.append_log(
+                "随机多录结束：成功 %s，失败 %s"
+                % (event.get("done", 0), event.get("failed", 0))
+            )
+            if event.get("message"):
+                tab.append_log(str(event["message"]))
+            return
+        if kind == "takes_cancelled":
+            tab.on_takes_cancelled(event)
+            return
         if kind == "cancelled":
             tab.on_cancelled(event)
             self.set_status("已停止生成。")
@@ -1118,8 +1422,10 @@ class App(tk.Tk):
             self.worker = None
             self.cancel_event = None
             tab.start_btn.configure(state="normal")
+            tab.random_btn.configure(state="normal")
             tab.stop_btn.configure(state="disabled")
             if self._closing and self._close_pending:
+                self._disable_drop()
                 self.destroy()
             return
 
@@ -1140,14 +1446,17 @@ class App(tk.Tk):
             self._close_ticks = 0
             self.after(400, self._wait_close)
             return
+        self._disable_drop()
         self.destroy()
 
     def _wait_close(self) -> None:
         if self.worker is None or not self.worker.is_alive():
+            self._disable_drop()
             self.destroy()
             return
         self._close_ticks += 1
         if self._close_ticks >= 75:  # 约 30 秒
+            self._disable_drop()
             self.destroy()
             return
         self.set_status("正在停止并退出……（%d）" % self._close_ticks)

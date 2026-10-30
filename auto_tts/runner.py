@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import os
+import random
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -298,6 +300,197 @@ def _entry_info(item: PreparedJob) -> Dict[str, Any]:
         "sovits": str(item.planned.voice.sovits),
         "ref_audio": str(item.planned.voice.ref_audio),
     }
+
+
+def _next_random_index(base: Path) -> int:
+    """同一句已有随机录音时，从下一个编号继续，保证文件名连续。"""
+    pattern = re.compile(re.escape(base.stem) + r"_随机(\d+)$")
+    used = []
+    try:
+        for path in base.parent.glob(base.stem + "_随机*" + base.suffix):
+            match = pattern.match(path.stem)
+            if match:
+                used.append(int(match.group(1)))
+    except OSError:
+        return 1
+    return (max(used) + 1) if used else 1
+
+
+def random_take_path(base: Path, take: int, settings: Settings) -> Path:
+    suffix = "_随机%02d%s" % (take, base.suffix)
+    max_path = int(settings.output.get("max_path_chars", 230))
+    room = max_path - len(str(base.parent)) - len(suffix) - 1
+    if room < 8:
+        raise RunnerError("随机录音文件名太长，无法保存：%s" % base)
+    stem = base.stem[:room]
+    return base.parent / (stem + suffix)
+
+
+def generate_random_takes(
+    settings: Settings,
+    item: PlannedJob,
+    count: int,
+    logger: Any,
+    progress: Optional[ProgressCallback] = None,
+    cancel: Optional[Any] = None,
+    no_server: bool = False,
+    keep_server: bool = False,
+    skip_gpu_check: bool = False,
+    server_url: Optional[str] = None,
+) -> int:
+    """对同一句用不同随机种子生成多条音频，文件名带 _随机NN。
+
+    这是预览区的辅助功能：不写项目 manifest，避免影响正常断点续跑。
+    编号从已有文件的下一号开始，所以多次点击会继续紧挨着排列。
+    """
+    count = int(count)
+    if count < 1 or count > 9:
+        raise RunnerError("随机条数必须在 1 到 9 之间")
+    base = Path(item.output)
+    start = _next_random_index(base)
+    try:
+        plan = [random_take_path(base, start + offset, settings) for offset in range(count)]
+    except RunnerError:
+        raise
+    except OSError as exc:
+        raise RunnerError("无法计算随机录音文件名：%s" % exc) from exc
+
+    settings.ensure_dirs()
+    client = TTSClient(
+        host=settings.api_host,
+        port=settings.api_port,
+        request_timeout=int(settings.api.get("request_timeout", 300)),
+        switch_timeout=int(settings.api.get("switch_timeout", 240)),
+        base_url=server_url,
+    )
+    server: Optional[ServerHandle] = None
+    current: Optional[Tuple[str, str, str, str]] = None
+    done = failed = 0
+    interrupted = False
+    code = 0
+    error_message = ""
+    try:
+        if cancel is not None and cancel.is_set():
+            interrupted = True
+        else:
+            try:
+                server = ensure_server(
+                    settings,
+                    item.voice,
+                    client,
+                    server_url=server_url,
+                    no_server=no_server,
+                    keep_server=settings.defaults.get("keep_server", False) or keep_server,
+                    skip_gpu_check=skip_gpu_check,
+                    logger=logger,
+                )
+                if server.fresh:
+                    current = _voice_signature(item.voice)
+                current = _ensure_voice(client, current, item.voice, logger)
+            except (ServerError, ApiError) as exc:
+                error_message = str(exc)
+                logger.error("随机录音启动失败：%s", exc)
+                code = 3 if isinstance(exc, ServerError) else 1
+            if not error_message:
+                for offset, output in enumerate(plan, start=1):
+                    if cancel is not None and cancel.is_set():
+                        interrupted = True
+                        break
+                    take = start + offset - 1
+                    seed = random.SystemRandom().randint(1, 2147483647)
+                    logger.info(
+                        "随机录音 %d/%d：%s（种子 %d）", offset, count, output.name, seed
+                    )
+                    _emit(
+                        progress,
+                        {
+                            "type": "take_start",
+                            "index": item.job.index,
+                            "take": take,
+                            "batch": offset,
+                            "count": count,
+                            "seed": seed,
+                            "output": str(output),
+                        },
+                    )
+                    try:
+                        payload = _payload(item, settings)
+                        payload["seed"] = seed
+                        data = client.tts(payload)
+                        info = write_wav_atomic(output, data, settings)
+                        done += 1
+                        logger.info("  随机完成 %s（%s）", output, info.summary())
+                        _emit(
+                            progress,
+                            {
+                                "type": "take_done",
+                                "index": item.job.index,
+                                "take": take,
+                                "batch": offset,
+                                "count": count,
+                                "seed": seed,
+                                "duration": info.duration,
+                                "output": str(output),
+                            },
+                        )
+                    except (TTSError, WavError, SettingsError, OSError) as exc:
+                        failed += 1
+                        error_message = str(exc)
+                        logger.error("  随机失败：%s", error_message)
+                        _emit(
+                            progress,
+                            {
+                                "type": "take_error",
+                                "index": item.job.index,
+                                "take": take,
+                                "batch": offset,
+                                "count": count,
+                                "output": str(output),
+                                "message": error_message,
+                            },
+                        )
+                        if _is_oom(error_message):
+                            break
+                if failed and not error_message:
+                    code = 1
+    except KeyboardInterrupt:
+        interrupted = True
+        logger.warning("收到中断，正在停止随机录音……")
+    finally:
+        try:
+            stop_server(settings, server, client, logger)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("停止服务时出错：%s", exc)
+        client.close()
+
+    if interrupted:
+        _emit(
+            progress,
+            {
+                "type": "takes_cancelled",
+                "index": item.job.index,
+                "done": done,
+                "failed": failed,
+                "count": count,
+            },
+        )
+        return 130
+    if failed and code == 0:
+        code = 1
+    _emit(
+        progress,
+        {
+            "type": "takes_finish",
+            "index": item.job.index,
+            "code": code,
+            "done": done,
+            "failed": failed,
+            "count": count,
+            "message": error_message,
+            "log": get_log_path(logger) or "",
+        },
+    )
+    return code
 
 
 def _is_oom(error: str) -> bool:
