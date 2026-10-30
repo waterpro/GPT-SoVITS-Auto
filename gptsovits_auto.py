@@ -398,7 +398,7 @@ def _interactive_draft(
 ) -> VoiceDraft:
     presets = discover_presets(settings, registry)
     catalog = discover_models(settings, registry)
-    key = args.key or _ask_text("角色名（文档里的说话人，例如 银狼）")
+    key = args.key or _ask_text("角色名（文档里的说话人，例如 A）")
     draft = VoiceDraft(key=validate_key(key))
 
     preset: Optional[PresetInfo] = None

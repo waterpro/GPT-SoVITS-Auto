@@ -364,7 +364,7 @@ class AddPresetDialog(tk.Toplevel):
         ttk.Label(card, text="输出目录", style="Card.TLabel").grid(row=3, column=0, sticky="w", pady=6)
         self.output_var = tk.StringVar()
         ttk.Entry(card, textvariable=self.output_var).grid(row=3, column=1, columnspan=2, sticky="ew", pady=6)
-        ttk.Label(card, text="留空时使用角色名；例如填“银狼”。", style="CardHint.TLabel").grid(
+        ttk.Label(card, text="留空时使用角色名；例如填“A”。", style="CardHint.TLabel").grid(
             row=4, column=1, columnspan=2, sticky="w"
         )
 

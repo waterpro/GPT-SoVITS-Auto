@@ -1,26 +1,26 @@
-# 音色映射示例。
+# 音色映射示例（本仓库不附带任何模型或参考音频）。
 #
 # 推荐用向导生成，而不是手写：
 #   run.bat voices scan
 #   run.bat voices add
 #
-# 这个文件是模板，占位符需要替换后才能使用。
+# 复制为 voices.yaml 后，把占位路径替换成你自己的权重和参考音频。
 voices:
-  角色A:
-    # 方式一：引用 GPT-SoVITS WebUI 里保存的预设。
+  A:
+    # 方式一：引用你自己的 GPT-SoVITS WebUI 预设。
     preset: 你的预设名
-    output_dir: 角色A
+    output_dir: A
     text_lang: zh
     aliases:
-    - 别名A
+    - 角色A
 
-  角色B:
+  B:
     # 方式二：直接写 GPT/SoVITS 权重和参考音频。
-    gpt: ..\GPT-SoVITS\GPT_weights\你的模型.ckpt
-    sovits: ..\GPT-SoVITS\SoVITS_weights\你的模型.pth
-    ref_audio: ..\参考音频\ref.wav
+    gpt: ..\models\B\B-e10.ckpt
+    sovits: ..\models\B\B_e10_s120.pth
+    ref_audio: ..\models\B\ref_B.wav
     # prompt_text 必须和 ref_audio 的实际内容逐字一致。
-    prompt_text: 参考音频里说的那句话
+    prompt_text: 参考音频里说的那句话。
     prompt_lang: zh
     text_lang: zh
-    output_dir: 角色B
+    output_dir: B

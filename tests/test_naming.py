@@ -55,7 +55,7 @@ class NamingTests(unittest.TestCase):
 
     def test_build_output_path(self):
         path = build_output_path(
-            self.settings, "银狼", "测试项目", "0001", "你好。"
+            self.settings, "A", "测试项目", "0001", "你好。"
         )
         self.assertTrue(str(path).startswith(str(self.settings.output_root)))
         self.assertEqual(path.suffix, ".wav")

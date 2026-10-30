@@ -14,67 +14,27 @@ import yaml
 from .settings import DEFAULT_SETTINGS, WORKSPACE_ROOT
 
 
-DEFAULT_VOICES: Dict[str, object] = {
-    "voices": {
-        "银狼": {
-            "preset": "银狼中立",
-            "output_dir": "银狼",
-            "text_lang": "zh",
-            "aliases": ["银狼中立", "银狼（中立）"],
-        },
-        "银狼（开心）": {
-            "preset": "银狼开心",
-            "output_dir": "银狼",
-            "text_lang": "zh",
-            "aliases": ["银狼开心"],
-        },
-        "爱音": {
-            "preset": "爱音1",
-            "output_dir": "爱音",
-            "text_lang": "zh",
-            "aliases": ["千早爱音", "Anon", "爱音1"],
-        },
-        "灯": {
-            "preset": "灯1",
-            "output_dir": "高松灯",
-            "text_lang": "zh",
-            "aliases": ["高松灯", "Tomorin", "偷摸零", "灯1"],
-        },
-        "灯2": {
-            "preset": "灯2",
-            "output_dir": "高松灯",
-            "text_lang": "zh",
-            "aliases": ["高松灯2"],
-        },
-        "祥子": {
-            "preset": "白祥1",
-            "output_dir": "祥子",
-            "text_lang": "zh",
-            "aliases": ["白祥", "丰川祥子", "白祥1"],
-        },
-        "芙宁娜": {
-            "preset": "芙宁娜（骄傲激动）",
-            "output_dir": "芙宁娜",
-            "text_lang": "zh",
-            "aliases": ["Funina", "芙宁娜（骄傲激动）"],
-        },
-    }
-}
+# 本仓库不附带任何音色模型、权重或参考音频。
+# 请先准备你自己的 GPT / SoVITS 权重与参考音频，再用 `voices add` 添加。
+# 也可以在这里直接写 A/B/C/D 等映射；示例见 voices/voices.example.yaml。
+DEFAULT_VOICES: Dict[str, object] = {"voices": {}}
 
 
 EXAMPLE_MD = """---
-project: 示例项目
+project: 雨后的公交站
 ---
 
-## 银狼
-银狼：今天天气不错，要不要一起去星穹列车？
-银狼（开心）：虽然我们的立场不同，但在这样一场宇宙级的盛会上，就先放下成见吧。
+## A
+A：雨好像停了，我们还要继续等吗？
 
-## 爱音
-[0001] 爱音：这怎么活得下去啊啊啊啊。
+## B
+B：你们看，云缝里透出阳光了。
 
-## 高松灯
-[04:25] 灯：想和大家一起，一直走下去。
+## C
+[0001] C：那家咖啡店已经开门了。
+
+## D
+[04:25] D：我请客，庆祝今天没有迟到。
 """
 
 

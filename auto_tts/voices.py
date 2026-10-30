@@ -564,10 +564,14 @@ def load_registry(
         raise VoiceError("音色配置文件不存在：%s" % path)
     data = _load_yaml(path)
     definitions = data.get("voices")
-    if not isinstance(definitions, dict) or not definitions:
-        raise VoiceError("音色配置缺少非空的 voices: 映射：%s" % path)
+    if not isinstance(definitions, dict):
+        raise VoiceError("音色配置缺少 voices: 映射：%s" % path)
 
     preset_index = scan_presets(settings)
+    if not definitions:
+        # 本仓库不附带音色；首次使用时允许空库，由 `voices add` 添加。
+        return VoiceRegistry({}, {}, preset_index, settings)
+
     model_index = ModelIndex(settings)
     voices_dir = path.parent
     default_text_lang = str(settings.defaults.get("text_lang", "zh"))

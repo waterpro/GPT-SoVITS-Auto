@@ -1,8 +1,8 @@
-# Gptsovit Auto
+# GPT-SoVITS Auto
 
 Batch text-to-speech for GPT-SoVITS, driven by a Markdown or plain-text script.
 
-Gptsovit Auto reads a dialogue document, resolves each speaker to a GPT/SoVITS
+GPT-SoVITS Auto reads a dialogue document, resolves each speaker to a GPT/SoVITS
 voice plus reference audio, calls the official GPT-SoVITS HTTP API, and writes
 one WAV per line into a per-character/per-project folder. The GPT-SoVITS
 installation is treated as **read-only**. A beginner-friendly Tkinter desktop
@@ -10,9 +10,14 @@ UI is included (`run_ui.bat`); the CLI remains available for automation.
 
 [中文说明](README.md)
 
+> **No voice models, GPT/SoVITS weights, or reference audio are bundled.**
+> Download and configure your own legally obtained models. A/B/C/D in the
+> examples are placeholders; they do not refer to any specific work or character.
+
 ## Screenshots
 
-> The screenshots use demo paths (`X:\...`), not a real user directory.
+> The screenshots use demo paths (`X:\...`) and placeholder voices A/B/C/D, not
+> a real user directory or real characters.
 
 ![Generate tab](docs/screenshots/generate.png)
 
@@ -39,6 +44,7 @@ The API listens on `127.0.0.1:9880` by default and is stopped after the run.
 - Windows 10/11
 - A working GPT-SoVITS installation (`api_v2.py`, `runtime\python.exe`,
   `GPT_weights*`, `SoVITS_weights*`, `presets`, pretrained models)
+- Your own GPT/SoVITS weights and reference audio
 - Python 3.9+ only if you do not use the GPT-SoVITS runtime
 - The workspace dependencies: `pip install -r requirements.txt`
 
@@ -46,8 +52,8 @@ The simplest layout is to put this workspace next to the GPT-SoVITS folder:
 
 ```text
 D:\AI\
-├─ GPT-SoVITS-v2pro-20250604-nvidia50\
-└─ Gptsovit script\
+├─ GPT-SoVITS\
+└─ GPT-SoVITS-Auto\
    ├─ run.bat
    ├─ config\settings.yaml
    └─ voices\voices.yaml
@@ -63,7 +69,7 @@ D:\AI\
 For a custom location:
 
 ```bat
-set GPT_SOVITS_HOME=E:\path\to\GPT-SoVITS
+set GPT_SOVITS_HOME=D:\path\to\GPT-SoVITS
 run.bat init --install "%GPT_SOVITS_HOME%"
 ```
 
@@ -92,8 +98,11 @@ run.bat check
 run.bat voices scan
 run.bat voices add
 run.bat parse --doc examples\example.md
-run.bat run --doc examples\example.md --project 示例项目
+run.bat run --doc examples\example.md --project sample
 ```
+
+`voices.yaml` is empty by default. Add A/B/C/D (or any names you use in the
+document) before running the example.
 
 `voices add` is an interactive wizard. It can use an existing WebUI preset or
 a manual GPT/SoVITS/ref-audio combination, validates the result, and backs up
@@ -102,12 +111,12 @@ a manual GPT/SoVITS/ref-audio combination, validates the result, and backs up
 Non-interactive add:
 
 ```bat
-run.bat voices add --key 角色A --preset 预设名 --yes
-run.bat voices add --key 角色B ^
-  --gpt "D:\models\角色B.ckpt" ^
-  --sovits "D:\models\角色B.pth" ^
-  --ref-audio "D:\models\ref.wav" ^
-  --prompt-text "参考音频的逐字文本" ^
+run.bat voices add --key A --preset "your-preset" --yes
+run.bat voices add --key B ^
+  --gpt "D:\models\B.ckpt" ^
+  --sovits "D:\models\B.pth" ^
+  --ref-audio "D:\models\ref_B.wav" ^
+  --prompt-text "the exact transcript of the reference audio" ^
   --prompt-lang zh --text-lang zh --yes
 ```
 
@@ -119,29 +128,27 @@ removes a voice and keeps a timestamped backup.
 One line per utterance; UTF-8 (with/without BOM) and GB18030 are supported.
 
 ```markdown
-银狼：今天天气不错，要不要一起去星穹列车？
-银狼（开心）：虽然我们的立场不同……
-爱音：这怎么活得下去啊啊啊啊。
-【高松灯】想和大家一起，一直走下去。
-[5931] 银狼：女生间贴贴你怎么先心动了？
-[04:25] 灯：想和大家一起，一直走下去。
-5931 | 银狼 | 竖线格式也可以。
+A：雨好像停了，我们还要继续等吗？
+B：你们看，云缝里透出阳光了。
+[0001] C：那家咖啡店已经开门了。
+[04:25] D：我请客，庆祝今天没有迟到。
+0001 | A | The pipe format also works.
 ```
 
 A Markdown heading sets the current speaker:
 
 ```markdown
-## 银狼
-今天天气不错。
-- 要不要一起去星穹列车？
+## A
+雨好像停了。
+- 我们还要继续等吗？
 ```
 
 Optional frontmatter:
 
 ```markdown
 ---
-project: 百合科普
-default_voice: 银狼
+project: rainy-bus-stop
+default_voice: A
 text_lang: zh
 ---
 ```
@@ -152,7 +159,7 @@ Output:
 <output_root>\<voice_dir>\<project>\<id>_<text>.wav
 ```
 
-IDs come from `[5931]`, then timecodes (`[04:25]` -> `0425`), then a
+IDs come from `[0001]`, then timecodes (`[04:25]` -> `0425`), then a
 zero-padded line index. Existing files are never overwritten unless they are
 owned by the current project manifest; resume is on by default.
 
@@ -198,7 +205,7 @@ and troubleshooting notes.
 
 ## Tests
 
-The workspace has 39 unit tests covering parsing, naming, settings, voice
+The workspace has 40 unit tests covering parsing, naming, settings, voice
 discovery/editing, server-config generation, and WAV validation:
 
 ```bat
@@ -208,10 +215,10 @@ discovery/editing, server-config generation, and WAV validation:
 `voices scan --json` is intended for scripting and prints only JSON.
 
 The UI was smoke-tested end-to-end: preview, generation of the four-line
-example, resume skip, preset add/remove, settings reload, and `run_ui.bat`
-launching `pythonw.exe`.
+example, resume skip, preset/manual add/remove, settings reload, and
+`run_ui.bat` launching `pythonw.exe`.
 
 ## License
 
 MIT. See [LICENSE](LICENSE). GPT-SoVITS itself is a separate project with its
-own license; this workspace does not vendor its code.
+own license; this workspace does not vendor its code or models.

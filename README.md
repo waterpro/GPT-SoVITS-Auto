@@ -1,24 +1,27 @@
-# GPT-SoVITS 自动语音生成脚本
+# GPT-SoVITS Auto
 
-这个工作区把「在 GPT-SoVITS WebUI 里选模型、填台词、点生成、另存」的流程自动化：
+把「在 GPT-SoVITS WebUI 里选模型、填台词、点生成、另存」的流程自动化：
 
 - 读取 `.md` / `.txt` 台词文档；
 - 按角色解析台词，自动切换 GPT / SoVITS 权重和参考音频；
 - 逐条调用 GPT-SoVITS 的推理接口生成 WAV；
 - 按 `角色/项目/编号_台词.wav` 保存；
 - 支持断点续跑、失败重试、报告和清单；
-- 支持 `voices scan/add/remove` 扫描并添加新音色（预设或手动权重）；
-- 提供简洁的 Windows 图形界面（双击 `run_ui.bat`），新手可以选文档、预览、生成、管理音色；
-- **只读** GPT-SoVITS 安装目录，不修改其中任何文件；
-- 提供 Windows 便携入口、开源模板和 MIT 许可证。
+- 提供 Windows 图形界面（双击 `run_ui.bat`），可以选文档、预览、生成、管理音色；
+- 提供 `voices scan/add/remove`，方便接入自己的音色；
+- **只读** GPT-SoVITS 安装目录，不修改其中任何文件。
 
-工作区：本目录  
-安装目录（只读）：由 `config\settings.yaml` 的 `install_root` 决定（默认是工作区旁边的 `GPT-SoVITS-v2pro-20250604-nvidia50`）  
-输出目录：由 `output.root` 决定（默认是工作区旁边的 `语音output`）
+> **本仓库不附带任何音色模型、GPT/SoVITS 权重或参考音频。**
+> 你需要自己准备合法取得的权重和参考音频，再用 `voices add` 添加。
+> 文档和示例中的 A/B/C/D 只是占位角色名，不对应任何特定作品或角色。
+
+- 工作区：本目录
+- 安装目录（只读）：由 `config\settings.yaml` 的 `install_root` 决定（默认是工作区旁边的 `GPT-SoVITS-v2pro-20250604-nvidia50` 或 `GPT-SoVITS`）
+- 输出目录：由 `output.root` 决定（默认是工作区旁边的 `语音output`）
 
 ## 界面预览
 
-> 截图使用演示路径 `X:\...`，不是真实本机路径。
+> 截图使用演示路径 `X:\...` 和占位音色 A/B/C/D，不是真实本机路径或真实角色。
 
 ![生成语音页](docs/screenshots/generate.png)
 
@@ -45,10 +48,21 @@ API 服务由脚本自动启动在 `127.0.0.1:9880`，生成结束后自动停�
 
 ---
 
-## 2. 目录结构
+## 2. 环境要求
+
+- Windows 10/11；
+- 可用的 GPT-SoVITS 安装目录（需要 `api_v2.py`、`runtime\python.exe`、权重目录和 `presets`）；
+- 你自己的 GPT/SoVITS 权重、参考音频和参考文本；
+- 安装目录的 runtime 已带 `requests`、`PyYAML`；图形界面需要 Tkinter（GPT-SoVITS 自带 runtime 已包含）。
+
+本仓库不下载、不分发任何模型或参考音频。`voices scan` 只会扫描你本机已有的权重和预设。
+
+---
+
+## 3. 目录结构
 
 ```text
-Gptsovit script\
+GPT-SoVITS-Auto\
 ├─ run.bat                     # Windows 命令行入口（自动找 runtime）
 ├─ run_ui.bat                  # 双击打开图形界面
 ├─ run.ps1                     # PowerShell 入口
@@ -68,11 +82,11 @@ Gptsovit script\
 │  ├─ settings.example.yaml    # 开源模板
 │  └─ tts_infer.local.yaml     # 每次启动 API 时自动生成的工作区配置
 ├─ voices\
-│  ├─ voices.yaml              # 角色 → 预设/权重/参考音频映射
+│  ├─ voices.yaml              # 角色 → 预设/权重/参考音频映射（默认空）
 │  ├─ voices.example.yaml      # 开源模板
 │  └─ backups\                 # voices add/remove 自动备份
 ├─ examples\
-│  └─ example.md               # 可直接试跑的示例文档
+│  └─ example.md               # 可直接试跑的 A/B/C/D 示例文档
 ├─ docs\screenshots\           # README 界面截图（演示路径）
 ├─ tests\                      # 单元测试
 ├─ state\                      # 断点续跑清单、服务标记
@@ -83,25 +97,26 @@ Gptsovit script\
 
 ---
 
-## 3. 快速开始
+## 4. 快速开始
 
-### 3.1 图形界面（推荐新手）
+### 4.1 图形界面（推荐新手）
 
 双击工作区里的 `run_ui.bat`。它会自动查找 `GPT_SOVITS_HOME`、旁边的 `GPT-SoVITS-v2pro-20250604-nvidia50`、旁边的 `GPT-SoVITS` 或 PATH 里的 `pythonw`。
 
 第一次打开：
 
 1. 如果顶部显示红色“环境未就绪”，点“设置”，选择 GPT-SoVITS 安装目录和输出目录，点“保存并重新检测”。
-2. 在“生成语音”页选择 `.md` / `.txt` 文档；可以先点“载入示例”试跑。
-3. 表格会显示每句的角色、音色、输出文件。点“开始生成”。
-4. 生成中可点“停止”；当前这一句结束后安全停下。
-5. 完成后点“打开输出目录”。
+2. 打开“音色库”，点“手动添加”或“从预设添加”，先添加至少一个音色（例如 A）。
+3. 打开“生成语音”，选择 `.md` / `.txt` 文档；也可以点“载入示例”。
+4. 表格会显示每句的角色、音色、输出文件。点“开始生成”。
+5. 生成中可点“停止”；当前这一句结束后安全停下。
+6. 完成后点“打开输出目录”。
 
-“音色库”页可以直接从预设添加，也可以手动选择 GPT/SoVITS 权重和参考音频。每次添加/删除都会自动备份 `voices\voices.yaml`。
+“音色库”页可以直接从你安装目录里的预设添加，也可以手动选择 GPT/SoVITS 权重和参考音频。每次添加/删除都会自动备份 `voices\voices.yaml`。
 
 > `run_ui.bat` 使用 `pythonw.exe`，没有黑色控制台。如果窗口没有出现，查看 `logs\ui-crash.log`，或先在终端执行 `run.bat --version` 检查运行时。
 
-### 3.2 命令行
+### 4.2 命令行
 
 在本工作区目录下打开终端：
 
@@ -111,15 +126,21 @@ run.bat check
 run.bat voices scan
 ```
 
-如果 GPT-SoVITS 安装在非默认位置（默认找本目录旁边的 `..\GPT-SoVITS-v2pro-20250604-nvidia50` 或 `..\GPT-SoVITS`），先执行一次：
+如果 GPT-SoVITS 安装在非默认位置，先执行一次：
 
 ```bat
 run.bat init --install "D:\GPT-SoVITS"
 ```
 
-`check` 会检查安装目录、运行时、音色、显存和 API 状态。当前配置下应看到 7 个音色；`voices scan` 会列出安装目录和模型包里所有可用的 GPT/SoVITS 配对。
+`check` 会检查安装目录、运行时、音色、显存和 API 状态。音色数量取决于你自己的 `voices.yaml`，默认是 0。
 
-先预览解析结果，不生成：
+添加音色（向导）：
+
+```bat
+run.bat voices add
+```
+
+添加完成后，用示例文档预览：
 
 ```bat
 run.bat parse --doc examples\example.md
@@ -131,16 +152,16 @@ run.bat parse --doc examples\example.md
 run.bat run --doc examples\example.md --project 示例项目
 ```
 
-输出示例：
+示例使用 A/B/C/D 四个占位角色；请先在 `voices.yaml` 里添加同名音色，或把你的音色加别名 A/B/C/D。
+
+输出示例（取决于你的 `output_dir`）：
 
 ```text
-<输出根目录>\银狼\示例项目\0001_今天天气不错，要不要一起去星穹列车？.wav
-<输出根目录>\银狼\示例项目\0002_虽然我们的立场不同，但在这样一场宇宙级的盛会上，就先放下成见吧。.wav
-<输出根目录>\爱音\示例项目\0001_这怎么活得下去啊啊啊啊。.wav
-<输出根目录>\高松灯\示例项目\0425_想和大家一起，一直走下去。.wav
+<输出根目录>\A\示例项目\0001_雨好像停了，我们还要继续等吗？.wav
+<输出根目录>\B\示例项目\0002_你们看，云缝里透出阳光了。.wav
+<输出根目录>\C\示例项目\0001_那家咖啡店已经开门了。.wav
+<输出根目录>\D\示例项目\0425_我请客，庆祝今天没有迟到。.wav
 ```
-
-当前配置的输出根目录见 `run.bat check` 的输出（默认是 `..\语音output`）。
 
 用自己的文档：
 
@@ -153,75 +174,75 @@ run.bat run   --doc "D:\素材\我的台词.md" --project "我的项目"
 
 ---
 
-## 4. 台词文档格式
+## 5. 台词文档格式
 
 支持 UTF-8（含 BOM）和 GB18030。一行一条台词；空行、`#` 注释、`//` 注释、代码块会被跳过。
 
-### 4.1 最常用的写法
+### 5.1 最常用的写法
 
 ```markdown
-银狼：今天天气不错，要不要一起去星穹列车？
-银狼（开心）：虽然我们的立场不同，但在这样一场宇宙级的盛会上，就先放下成见吧。
-爱音：这怎么活得下去啊啊啊啊。
-【高松灯】想和大家一起，一直走下去。
+A：雨好像停了，我们还要继续等吗？
+B：你们看，云缝里透出阳光了。
+C：那家咖啡店已经开门了。
+D：我请客，庆祝今天没有迟到。
 ```
 
-### 4.2 编号与时间码
+### 5.2 编号与时间码
 
 ```markdown
-[5931] 银狼：女生间贴贴你怎么先心动了？
-[0001] 爱音：这怎么活得下去啊啊啊啊。
-[04:25] 灯：想和大家一起，一直走下去。
-[09:02-07:43] 银狼：这一句会使用 0902_0743 作为编号。
+[0001] A：雨好像停了，我们还要继续等吗？
+[0002] B：你们看，云缝里透出阳光了。
+[04:25] C：那家咖啡店已经开门了。
+[09:02-07:43] D：这一句会使用 0902_0743 作为编号。
 ```
 
-- 显式编号优先：`[5931]` → `5931_...wav`；
+- 显式编号优先：`[0001]` → `0001_...wav`；
 - 其次时间码：`[04:25]` → `0425_...wav`，`[09:02-07:43]` → `0902_0743_...wav`；
 - 都没有时，用文档内序号：`0001_...wav`。
 
-### 4.3 竖线、标题、列表、引用
+### 5.3 竖线、标题、列表、引用
 
 ```markdown
-5931 | 银狼 | 女生间贴贴你怎么先心动了？
-银狼 | 今天天气不错。
+0001 | A | 雨好像停了。
+A | 我们还要继续等吗？
 ```
 
 ```markdown
-## 银狼
-今天天气不错。
-- 要不要一起去星穹列车？
-> 我们的立场虽然不同。
+## A
+雨好像停了。
+- 我们还要继续等吗？
+> 再等五分钟吧。
 
-## 爱音
-这怎么活得下去啊啊啊啊。
+## B
+你们看，云缝里透出阳光了。
 ```
 
 `## 角色` 之后，没有写角色名的行会归给该角色。标题不是已配置角色时，会清空当前角色，不会误归给上一个角色。
 
-### 4.4 frontmatter
+### 5.4 frontmatter
 
 ```markdown
 ---
-project: 百合科普
-default_voice: 银狼
+project: 雨后的公交站
+default_voice: A
 text_lang: zh
 ---
 
-[5931] 银狼：女生间贴贴你怎么先心动了？
+[0001] A：雨好像停了，我们还要继续等吗？
 ```
 
 - `project`：项目文件夹名；命令行 `--project` 优先；
 - `default_voice`：没有角色名的行使用该角色；
 - `text_lang`：覆盖本文件的默认语言（仅当音色没有显式 `text_lang` 时）。
 
-### 4.5 清洗规则
+### 5.5 清洗规则
 
 - 去掉 Markdown 粗体、链接、图片、HTML 标签、零宽字符；
 - 行首的已知情绪标签（如 `【开心】`、`（生气）`）会去掉，不会读出来；
 - 保留中文全角标点；
 - 空台词、超长台词、未知角色会报错并给出行号。
 
-### 4.6 不支持的格式
+### 5.6 不支持的格式
 
 - 不解析 SRT / ASS 字幕；
 - 不自动按句号拆成多条 WAV（一条输入 = 一个 WAV，内部由 `cut5` 自动切分）；
@@ -229,27 +250,13 @@ text_lang: zh
 
 ---
 
-## 5. 音色配置
+## 6. 音色配置
 
-`voices\voices.yaml` 当前已配置 7 个音色，均来自安装目录的 `presets`：
+`voices\voices.yaml` 默认是空的（`voices: {}`）。本仓库不附带任何音色，需要你自己添加。
 
-| 文档里写 | 预设 | 输出目录 | 常用别名 |
-|---|---|---|---|
-| `银狼` | 银狼中立 | 银狼 | 银狼中立、银狼（中立） |
-| `银狼（开心）` | 银狼开心 | 银狼 | 银狼开心 |
-| `爱音` | 爱音1 | 爱音 | 千早爱音、Anon、爱音1 |
-| `灯` | 灯1 | 高松灯 | 高松灯、Tomorin、偷摸零、灯1 |
-| `灯2` | 灯2 | 高松灯 | 高松灯2 |
-| `祥子` | 白祥1 | 祥子 | 白祥、丰川祥子、白祥1 |
-| `芙宁娜` | 芙宁娜（骄傲激动） | 芙宁娜 | Funina、芙宁娜（骄傲激动） |
+文档里的角色名必须能在 `voices.yaml` 的 `key` 或 `aliases` 中找到；例如你用 A/B/C/D 写台词，就给对应音色起名 A/B/C/D。
 
-查看完整信息（参考音频、prompt、权重路径）：
-
-```bat
-run.bat voices list
-```
-
-### 5.1 用向导添加音色
+### 6.1 用向导添加音色
 
 先扫描安装目录、`presets` 和 `extra_model_roots`：
 
@@ -265,41 +272,41 @@ run.bat voices add
 
 向导会先让你选择“预设音色”或“手动音色”：
 
-- **预设音色**：从 `presets` 里选一个，模型、参考音频、prompt 文本和语言会自动读取，只需填角色名、输出目录和别名；
-- **手动音色**：从扫描到的 GPT/SoVITS 配对里选，或直接粘贴权重路径，再填参考音频和参考文本；适合模型包、v4 LoRA、自己训练的模型。
+- **预设音色**：从你自己安装目录的 `presets` 里选一个，模型、参考音频、prompt 文本和语言会自动读取，只需填角色名、输出目录和别名；
+- **手动音色**：从扫描到的 GPT/SoVITS 配对里选，或直接粘贴权重路径，再填参考音频和参考文本；适合模型包、LoRA、自己训练的模型。
 
 非交互式（适合脚本/批处理）：
 
 ```bat
-run.bat voices add --key 新角色 --preset 银狼中立 --output-dir 银狼 --alias 银狼中立 --yes
+run.bat voices add --key A --preset "你的预设名" --output-dir A --alias 角色A --yes
 ```
 
 写入前会先做一次完整校验（模型版本、参考音频、语言、别名冲突），通过后才备份并原子写入。备份在 `voices\backups\`，默认保留最近 20 份。
 
-### 5.2 手动音色的字段
+### 6.2 手动音色的字段
 
 参考音频、参考文本、语言必须互相对应，否则生成质量会明显变差或直接报错。手动音色的向导等价于下面这段 YAML（也可以直接编辑 `voices\voices.yaml`）：
 
 ```yaml
-  达尼亚:
-    gpt: ..\GPT-SoVITS models\达尼亚\dania-e15.ckpt
-    sovits: ..\GPT-SoVITS models\达尼亚\dania_e16_s2192.pth
-    ref_audio: ..\GPT-SoVITS models\达尼亚\output.wav_0009342720_0009558400.wav
-    prompt_text: 怎么啊？如果有你在也不放心，那就干脆给我也装个限制器或者炸弹喽。
-    prompt_lang: zh
-    text_lang: zh
-    output_dir: 达尼亚
+A:
+  gpt: ..\models\A\A-e10.ckpt
+  sovits: ..\models\A\A_e10_s120.pth
+  ref_audio: ..\models\A\ref_A.wav
+  prompt_text: 参考音频里说的那句话。
+  prompt_lang: zh
+  text_lang: zh
+  output_dir: A
 ```
 
 非交互式等价命令：
 
 ```bat
-run.bat voices add --key 达尼亚 ^
-  --gpt "..\GPT-SoVITS models\达尼亚\dania-e15.ckpt" ^
-  --sovits "..\GPT-SoVITS models\达尼亚\dania_e16_s2192.pth" ^
-  --ref-audio "..\GPT-SoVITS models\达尼亚\output.wav_0009342720_0009558400.wav" ^
-  --prompt-text "怎么啊？如果有你在也不放心，那就干脆给我也装个限制器或者炸弹喽。" ^
-  --prompt-lang zh --text-lang zh --output-dir 达尼亚 --yes
+run.bat voices add --key A ^
+  --gpt "..\models\A\A-e10.ckpt" ^
+  --sovits "..\models\A\A_e10_s120.pth" ^
+  --ref-audio "..\models\A\ref_A.wav" ^
+  --prompt-text "参考音频里说的那句话。" ^
+  --prompt-lang zh --text-lang zh --output-dir A --yes
 ```
 
 字段说明：
@@ -313,23 +320,23 @@ run.bat voices add --key 达尼亚 ^
 - `output_dir`：输出到 `<输出根目录>\<output_dir>\<项目>\`，输出根目录默认 `..\语音output`；
 - `speed_factor` / `seed`：可选，覆盖全局默认值。
 
-> v4 模型 `夕_e10_s210_l32.pth`、`枫原万叶_ZH_e10_s960_l32.pth` 已在权重目录中，但目前没有找到对应参考音频和 prompt 文本。要使用它们，必须先补 `ref_audio`、`prompt_text`、`prompt_lang`。`voices scan` 会把它们列在“配对”里，但标记为未配置参考音频。
+> 没有参考音频和 prompt 文本的权重不能直接使用。`voices scan` 会把它列出来并标记为未配置；请先准备合法的参考音频和逐字对应的文本。
 
-### 5.3 查看、删除和备份
+### 6.3 查看、删除和备份
 
 ```bat
 run.bat voices list                 # 已配置音色
 run.bat voices scan                 # 未配置的模型/预设/模型包
-run.bat voices remove --key 角色名  # 删除一个音色（会先备份）
+run.bat voices remove --key A       # 删除一个音色（会先备份）
 ```
 
 `voices remove` 不会删除最后一条音色；删除和添加都会在 `voices\backups\` 留一份带时间戳的 YAML。所有写入都只发生在工作区，不会改安装目录的 `presets`。
 
 ---
 
-## 6. 命令行参考
+## 7. 命令行参考
 
-### 6.1 命令
+### 7.1 命令
 
 | 命令 | 作用 |
 |---|---|
@@ -350,14 +357,14 @@ run.bat voices remove --key 角色名  # 删除一个音色（会先备份）
 
 ```bat
 run.bat init --install "D:\GPT-SoVITS" --output "D:\voice_output" --models "D:\models"
-run.bat voices add --key 新角色 --preset 灯2 --output-dir 高松灯 --alias 灯2 --yes
-run.bat voices add --key 达尼亚 --gpt "..." --sovits "..." --ref-audio "..." --prompt-text "..." --prompt-lang zh --text-lang zh --yes
-run.bat voices add --key 测试 --preset 银狼中立 --dry-run   # 只打印，不写文件
+run.bat voices add --key A --preset "你的预设名" --output-dir A --alias 角色A --yes
+run.bat voices add --key B --gpt "..." --sovits "..." --ref-audio "..." --prompt-text "..." --prompt-lang zh --text-lang zh --yes
+run.bat voices add --key 测试 --preset "你的预设名" --dry-run   # 只打印，不写文件
 ```
 
 `voices add` 的 `--version` 通常不用填，脚本会从 SoVITS 文件头识别；`--force` 用于覆盖同名音色（仍会备份）。
 
-### 6.2 `run` 常用参数
+### 7.2 `run` 常用参数
 
 | 参数 | 说明 |
 |---|---|
@@ -379,7 +386,7 @@ run.bat voices add --key 测试 --preset 银狼中立 --dry-run   # 只打印，
 | `--skip-gpu-check` | 跳过显存预检 |
 | `--debug`（全局） | 放在子命令前，例如 `run.bat --debug run ...`，异常时打印完整堆栈 |
 
-### 6.3 退出码
+### 7.3 退出码
 
 | 代码 | 含义 |
 |---|---|
@@ -391,9 +398,9 @@ run.bat voices add --key 测试 --preset 银狼中立 --dry-run   # 只打印，
 
 ---
 
-## 7. 输出、清单、断点续跑
+## 8. 输出、清单、断点续跑
 
-### 7.1 输出
+### 8.1 输出
 
 ```text
 <输出根目录>\<voice_dir>\<project>\<id>_<text>.wav
@@ -407,7 +414,7 @@ run.bat voices add --key 测试 --preset 银狼中立 --dry-run   # 只打印，
 - 同目录重名自动加 `_2`、`_3`；
 - 已存在且不属于本清单的文件**绝不覆盖**。
 
-### 7.2 清单与报告
+### 8.2 清单与报告
 
 - 清单：`state\<project>-<文档sha8>.json`
 - 报告：`logs\<project>-<时间戳>.csv`
@@ -429,7 +436,7 @@ run.bat run --doc ... --overwrite
 
 ---
 
-## 8. 只读保证
+## 9. 只读保证
 
 脚本只读安装目录，具体做法：
 
@@ -445,11 +452,11 @@ run.bat run --doc ... --overwrite
 - `presets\history.json`
 - `presets\ui_config.json`
 
-并且安装目录 `GPT_SoVITS` 下的 `__pycache__` 数量保持不变（18 个，均为原有）。
+并且安装目录 `GPT_SoVITS` 下的 `__pycache__` 数量保持不变（均为原有）。
 
 ---
 
-## 9. 显存与 WebUI
+## 10. 显存与 WebUI
 
 - 脚本会在 `127.0.0.1:9880` 启动自己的 API；当前 WebUI 的 TTS 服务在 9872，两者可以同时存在。
 - 实测加载一个 v2ProPlus 音色约占 2.7 GB 显存；当前 12 GB 显卡 + WebUI 常驻时，脚本默认要求启动前至少 4000 MiB 空闲显存。
@@ -461,10 +468,13 @@ run.bat run --doc ... --overwrite
 
 ---
 
-## 10. 常见问题
+## 11. 常见问题
 
 **`未知角色“XXX”（请在 voices.yaml 中配置，或添加 aliases）`**  
 运行 `run.bat voices add` 添加角色，或给现有音色加别名；先 `run.bat voices list` 确认。
+
+**`音色配置缺少 voices: 映射` / `音色配置文件不存在`**
+先执行 `run.bat init`；首次使用 `voices.yaml` 是空的，需要 `voices add`。
 
 **API 返回 400 / `tts failed`**  
 看 `logs\api-*.log` 和 `logs\run-*.log`。常见原因：参考音频不存在、`prompt_text` 与参考音频不匹配、`text_lang` / `prompt_lang` 不被该版本支持、v3/v4 缺少 `prompt_text`。
@@ -490,26 +500,26 @@ run.bat init --install "%GPT_SOVITS_HOME%"
 
 ---
 
-## 11. 已验证内容
+## 12. 已验证内容
 
-- 39 个单元测试全部通过（解析、命名、配置、音色、服务配置、WAV 校验、音色编辑器/发现/备份）。
-- 示例文档 4 句已实际生成：银狼、银狼（开心）、爱音、灯；验证了：
+- 40 个单元测试全部通过（解析、命名、配置、音色、服务配置、WAV 校验、音色编辑器/发现/备份）。
+- 生成流程已用 4 句示例和本机音色映射实际验证（A/B/C/D 为占位名，仓库不包含这些音色）；验证了：
   - API 自动启动/停止；
-  - v2ProPlus 权重切换；
+  - 权重切换；
   - 中文台词和中文路径；
-  - 14 个 aux 参考音频的灯1；
+  - 多参考音频音色；
   - WAV 头校验和时长读取；
   - 断点续跑跳过；
   - 安装目录关键文件哈希不变、无新增 `.pyc`。
 - 持久服务 `server start` / `status` / `stop` 已验证。
-- `voices scan` 已验证：7 个已配置音色、7 个预设、25 组 GPT/SoVITS 配对、10 个模型包。
+- `voices scan` 已验证：会按你本机的权重和预设列出配对、未配置模型和模型包（数量取决于你的安装目录）。
 - `voices add` 的预设/手动 dry-run、实际添加/删除、重复键保护和自动备份已验证。
 - `run.bat --version`、`run.bat check`、`init --install` 的路径更新逻辑已验证；`run.bat`/`add_voice.bat` 使用纯 ASCII + CRLF，避免 cmd.exe 解析中文注释出错。
-- 图形界面已验证：主窗口、生成页解析、音色库、添加预设音色、设置页、帮助页；从界面生成 4 句示例成功，模型切换和断点续跑（4 句全部跳过）正常；`run_ui.bat` 能启动 `pythonw` 进程。
+- 图形界面已验证：主窗口、生成页解析、音色库、添加预设音色、手动添加音色、设置页、帮助页；从界面生成 4 句示例成功，模型切换和断点续跑正常；`run_ui.bat` 能启动 `pythonw` 进程。
 
 ---
 
-## 12. 限制与后续可扩展
+## 13. 限制与后续可扩展
 
 - 一条台词生成一个 WAV；不解析 SRT/ASS。
 - 不自动生成参考音频、prompt 文本或情感标签。
@@ -522,11 +532,12 @@ run.bat init --install "%GPT_SOVITS_HOME%"
 
 ---
 
-## 13. 开源发布
+## 14. 开源发布
 
 仓库已包含 `.gitignore`、`requirements.txt`、MIT `LICENSE`、`config/settings.example.yaml`、`voices/voices.example.yaml`、`README.en.md`、`CONTRIBUTING.md`。发布前注意：
 
 - 不要提交本地 `config/settings.yaml`、`config/tts_infer.local.yaml`、`voices/voices.yaml`、`voices/backups/`、`state/`、`logs/`、`cache/`、`tmp/`；`.gitignore` 已覆盖。
 - 不要把自己的绝对路径写进示例文件；示例使用 `..\GPT-SoVITS`、`..\语音output` 这类相对路径。
+- **不要分发音色模型、权重、参考音频或角色相关的截图/文案**；使用者应自行下载和配置。
 - GPT-SoVITS 上游是 MIT；本项目的 `LICENSE` 也使用 MIT。若你希望换成 Apache-2.0/GPL，发布前替换 `LICENSE` 和 README 中的许可证说明。
-- 音色模型和参考音频可能涉及角色版权/数据集许可，不要随仓库分发；只提供配置示例。
+- 示例中的 A/B/C/D 只是占位角色名；请勿把它们改成受版权保护的角色名或作品名。

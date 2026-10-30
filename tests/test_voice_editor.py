@@ -38,92 +38,107 @@ class VoiceEditorTests(unittest.TestCase):
             )
         )
         self.target = self.tmp / "voices.yaml"
-        shutil.copy2(str(self.settings.voices_path), str(self.target))
+        if self.settings.voices_path.exists():
+            shutil.copy2(str(self.settings.voices_path), str(self.target))
+        else:
+            self.target.write_text("voices: {}\n", encoding="utf-8")
 
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
 
     def test_pair_key_normalizes_versions_and_training_suffixes(self):
-        self.assertEqual(pair_key("dania-e15"), pair_key("dania_e16_s2192"))
-        self.assertEqual(pair_key("银狼-e10"), pair_key("银狼_e10_s120"))
-        self.assertEqual(
-            pair_key("MyGO_千早爱音_v2pp"),
-            pair_key("MyGO_千早爱音_v2pp"),
-        )
-        self.assertEqual(pair_key("夕-e10"), pair_key("夕_e10_s210_l32"))
-        self.assertEqual(
-            pair_key("枫原万叶_ZH-e10"),
-            pair_key("枫原万叶_ZH_e10_s960_l32"),
-        )
+        self.assertEqual(pair_key("model-e10"), pair_key("model_e10_s120"))
+        self.assertEqual(pair_key("voice-v2pp"), pair_key("voice_v2pp"))
+        self.assertEqual(pair_key("model_x-e10"), pair_key("model_x_e10_s210_l32"))
+        self.assertEqual(pair_key("model_y-e10"), pair_key("model_y_e10_s960_l32"))
 
     def test_discovery_has_pairs_presets_and_packs(self):
         catalog = discover_models(self.settings, self.registry)
         presets = discover_presets(self.settings, self.registry)
-        self.assertGreaterEqual(len(catalog.pairs), 20)
         self.assertEqual(len(catalog.unpaired), 0)
-        self.assertGreaterEqual(len(presets), 7)
-        self.assertGreaterEqual(len(catalog.packs), 5)
-        by_key = {pair.key: pair for pair in catalog.pairs}
-        self.assertIn("dania", by_key)
-        self.assertEqual(by_key["dania"].version, "v2ProPlus")
-        self.assertIn("银狼", by_key[pair_key("银狼-e10")].configured)
+        self.assertGreaterEqual(len(presets), 0)
+        self.assertGreaterEqual(len(catalog.packs), 0)
+        if catalog.pairs:
+            self.assertTrue(all(pair.gpt and pair.sovits for pair in catalog.pairs))
+        if self.registry.list():
+            self.assertTrue(any(pair.configured for pair in catalog.pairs))
 
     def test_plan_write_and_remove_preset_voice(self):
-        draft = VoiceDraft(key="测试音色", preset="银狼中立")
+        presets = discover_presets(self.settings, self.registry)
+        if not presets:
+            self.skipTest("安装目录没有预设")
+        before = yaml.safe_load(self.target.read_text(encoding="utf-8"))
+        before_voices = before.get("voices") or {}
+        self.assertNotIn("A", before_voices)
+
+        draft = VoiceDraft(key="A", preset=presets[0].name)
         ensure_draft_defaults(self.settings, draft)
         data, text, voice = plan_voice(self.settings, draft, target=self.target)
-        self.assertIn("测试音色", data["voices"])
-        self.assertEqual(voice.preset, "银狼中立")
-        self.assertNotIn("测试音色", self.target.read_text(encoding="utf-8"))
+        self.assertIn("A", data["voices"])
+        self.assertEqual(voice.preset, presets[0].name)
+        saved = yaml.safe_load(self.target.read_text(encoding="utf-8"))
+        self.assertNotIn("A", saved.get("voices") or {})
 
         data, text, voice, backup = write_voice(
             self.settings, draft, target=self.target
         )
         self.assertTrue(backup and backup.exists())
         saved = yaml.safe_load(self.target.read_text(encoding="utf-8"))
-        self.assertIn("测试音色", saved["voices"])
+        self.assertIn("A", saved["voices"])
 
-        data, text, backup = remove_voice(
-            self.settings, "测试音色", target=self.target
-        )
+        if not before_voices:
+            second = VoiceDraft(key="B", preset=presets[0].name)
+            ensure_draft_defaults(self.settings, second)
+            write_voice(self.settings, second, target=self.target)
+
+        data, text, backup = remove_voice(self.settings, "A", target=self.target)
         self.assertTrue(backup and backup.exists())
         saved = yaml.safe_load(self.target.read_text(encoding="utf-8"))
-        self.assertNotIn("测试音色", saved["voices"])
+        self.assertNotIn("A", saved["voices"])
 
     def test_duplicate_key_needs_force(self):
-        draft = VoiceDraft(key="银狼", preset="银狼中立")
+        presets = discover_presets(self.settings, self.registry)
+        if not presets:
+            self.skipTest("安装目录没有预设")
+        draft = VoiceDraft(key="A", preset=presets[0].name)
         ensure_draft_defaults(self.settings, draft)
+        write_voice(self.settings, draft, target=self.target)
         with self.assertRaises(VoiceError):
             plan_voice(self.settings, draft, target=self.target)
         data, text, voice = plan_voice(
             self.settings, draft, target=self.target, force=True
         )
-        self.assertIn("银狼", data["voices"])
-        self.assertEqual(voice.key, "银狼")
+        self.assertIn("A", data["voices"])
+        self.assertEqual(voice.key, "A")
 
     def test_manual_voice_with_pack_paths(self):
-        if not self.settings.extra_model_roots:
-            self.skipTest("未配置额外模型目录")
-        root = self.settings.extra_model_roots[0] / "达尼亚"
-        gpt = root / "dania-e15.ckpt"
-        sovits = root / "dania_e16_s2192.pth"
-        ref = root / "output.wav_0009342720_0009558400.wav"
-        if not (gpt.exists() and sovits.exists() and ref.exists()):
-            self.skipTest("达尼亚模型包不存在")
+        catalog = discover_models(self.settings, self.registry)
+        pair = next(
+            (item for item in catalog.pairs if item.gpt and item.sovits),
+            None,
+        )
+        refs = [
+            ref
+            for pack in catalog.packs
+            for ref in pack.refs
+            if ref.suffix.lower() in (".wav", ".mp3", ".flac")
+        ]
+        if pair is None or not refs:
+            self.skipTest("没有可用的权重配对或参考音频")
         draft = VoiceDraft(
-            key="达尼亚测试",
-            gpt=gpt,
-            sovits=sovits,
-            ref_audio=ref,
-            prompt_text="怎么啊？如果有你在也不放心，那就干脆给我也装个限制器或者炸弹喽。",
+            key="B",
+            gpt=pair.gpt.path,
+            sovits=pair.sovits.path,
+            ref_audio=refs[0],
+            prompt_text="这是一段参考音频。",
             prompt_lang="zh",
             text_lang="zh",
         )
         ensure_draft_defaults(self.settings, draft)
         data, text, voice = plan_voice(self.settings, draft, target=self.target)
-        self.assertEqual(voice.version, "v2ProPlus")
+        self.assertEqual(voice.version, pair.version)
         self.assertEqual(voice.prompt_text, draft.prompt_text)
-        self.assertIn("达尼亚测试", data["voices"])
+        self.assertIn("B", data["voices"])
 
 
 class PortableSettingsTests(unittest.TestCase):
@@ -143,7 +158,8 @@ class PortableSettingsTests(unittest.TestCase):
             self.assertNotEqual(data["install_root"], str(settings.install_root))
             self.assertIn("..", data["install_root"])
             self.assertIn("..", data["output"]["root"])
-            self.assertTrue(data["extra_model_roots"][0].startswith(".."))
+            if data.get("extra_model_roots"):
+                self.assertTrue(data["extra_model_roots"][0].startswith(".."))
         finally:
             shutil.rmtree(str(workspace), ignore_errors=True)
 
