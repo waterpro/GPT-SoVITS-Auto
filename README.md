@@ -16,6 +16,16 @@
 安装目录（只读）：由 `config\settings.yaml` 的 `install_root` 决定（默认是工作区旁边的 `GPT-SoVITS-v2pro-20250604-nvidia50`）  
 输出目录：由 `output.root` 决定（默认是工作区旁边的 `语音output`）
 
+## 界面预览
+
+> 截图使用演示路径 `X:\...`，不是真实本机路径。
+
+![生成语音页](docs/screenshots/generate.png)
+
+![音色库](docs/screenshots/voices.png)
+
+![设置](docs/screenshots/settings.png)
+
 ---
 
 ## 1. 为什么不是“自动点击 WebUI”
@@ -63,6 +73,7 @@ Gptsovit script\
 │  └─ backups\                 # voices add/remove 自动备份
 ├─ examples\
 │  └─ example.md               # 可直接试跑的示例文档
+├─ docs\screenshots\           # README 界面截图（演示路径）
 ├─ tests\                      # 单元测试
 ├─ state\                      # 断点续跑清单、服务标记
 ├─ logs\                       # 运行日志、API 日志、CSV 报告

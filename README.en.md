@@ -10,6 +10,16 @@ UI is included (`run_ui.bat`); the CLI remains available for automation.
 
 [中文说明](README.md)
 
+## Screenshots
+
+> The screenshots use demo paths (`X:\...`), not a real user directory.
+
+![Generate tab](docs/screenshots/generate.png)
+
+![Voice library](docs/screenshots/voices.png)
+
+![Settings](docs/screenshots/settings.png)
+
 ## Why the HTTP API instead of clicking the WebUI
 
 The TTS WebUI does not expose a generation endpoint, and its preset/history
